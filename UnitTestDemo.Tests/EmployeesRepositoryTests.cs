@@ -1,12 +1,15 @@
-﻿using NSubstitute;
+﻿using Microsoft.VisualStudio.TestPlatform.ObjectModel;
+using NSubstitute;
 using UnitTestDemo.Entities;
 using UnitTestDemo.Interfaces;
 
 namespace UnitTestDemo.Tests;
 
-[TestFixture] 
-public class EmployeesRepositoryTests 
+[TestFixture]
+public class EmployeesRepositoryTests
 {
+    DateTime _startDate = new DateTime(2005, 07, 12);
+
     [OneTimeSetUp]
     public void OneTimeSetUp()
     {
@@ -43,8 +46,8 @@ public class EmployeesRepositoryTests
 
         //Arrange - This is where you set up your dependencies, and any variables you may need for testing purposes
 
-        Employee employeeToUpdate = new Employee(1, "Ronald", "McDonald", 7, "Clown", 100000);
-        
+        Employee employeeToUpdate = new Employee(1, "Ronald", "McDonald", 7, "Clown", 100000, _startDate);
+
         // This is a mock or substitute
         // When unit testing you want to isolate your dependencies
         // In this case we don't want our Repository tests to depend on having a REAL IEmployeesDAL object pointing to a REAL Database
@@ -67,7 +70,7 @@ public class EmployeesRepositoryTests
         //This is where you ensure the results of Act are valid
 
         // when you assert you ALWAYS assert the expected value followed by the actual/resulting value 
-        Assert.AreEqual(EmployeesRepository.Success, result);
+        Assert.That(result, Is.EqualTo(EmployeesRepository.Success));
 
         // sometimes it is useful or necessary to assert specific calls that a dependency has received 
         // one drawback of this approach is now your unit test is asserting specific implementation details as opposed to a specific result
@@ -93,7 +96,7 @@ public class EmployeesRepositoryTests
         employeesDALMock.EmployeeExists(Arg.Any<int>()).Returns(true);
 
         Employee employeeToUpdate =
-            new Employee(1, "Ronald", "McDonald", 7, "Clown", EmployeesRepository.MaxSalary + 1);
+            new Employee(1, "Ronald", "McDonald", 7, "Clown", EmployeesRepository.MaxSalary + 1, _startDate);
 
         EmployeesRepository systemUnderTest = new EmployeesRepository(employeesDALMock);
 
@@ -101,7 +104,7 @@ public class EmployeesRepositoryTests
         int result = systemUnderTest.UpdateEmployee(employeeToUpdate);
 
         // Assert
-        Assert.AreEqual(EmployeesRepository.InvalidSalaryReturnCode, result, "Employee with invalid salary should return invalid salary return code!"); 
+        Assert.That(result, Is.EqualTo(EmployeesRepository.InvalidInput), "Employee with invalid salary should return invalid salary return code!");
 
         employeesDALMock.DidNotReceive().UpdateEmployee(Arg.Any<Employee>()); // With an invalid salary nothing should have been updated
     }
@@ -123,7 +126,7 @@ public class EmployeesRepositoryTests
         // This is also how you could make your dependency return a specific value to then be used by the test
 
 
-        Employee employeeToUpdate = new Employee(1, "Ronald", "McDonald", 7, "Clown", 100);
+        Employee employeeToUpdate = new Employee(1, "Ronald", "McDonald", 7, "Clown", 100, _startDate);
 
         EmployeesRepository systemUnderTest = new EmployeesRepository(employeesDALMock);
 
@@ -133,7 +136,7 @@ public class EmployeesRepositoryTests
 
 
         // Assert
-        Assert.AreEqual(EmployeesRepository.UnknownError, result);
+        Assert.That(result, Is.EqualTo(EmployeesRepository.UnknownError));
     }
 
     [Test]
@@ -142,7 +145,7 @@ public class EmployeesRepositoryTests
         // Arrange
         IEmployeesDAL employeesDALMock = Substitute.For<IEmployeesDAL>();
         employeesDALMock.EmployeeExists(Arg.Any<int>()).Returns(false);
-        Employee employeeToUpdate = new Employee(1, "Ronald", "McDonald", 7, "Clown", 100);
+        Employee employeeToUpdate = new Employee(1, "Ronald", "McDonald", 7, "Clown", 100, _startDate);
 
         EmployeesRepository systemUnderTest = new EmployeesRepository(employeesDALMock);
 
@@ -150,12 +153,12 @@ public class EmployeesRepositoryTests
         int result = systemUnderTest.UpdateEmployee(employeeToUpdate);
 
         // Assert
-        Assert.AreEqual(EmployeesRepository.EmployeeNotFoundErrorCode, result);
+        Assert.That(result, Is.EqualTo(EmployeesRepository.InvalidInput));
 
         // it might be worth checking that if we don't find the employee to update that we do not call update?
         employeesDALMock.DidNotReceive().UpdateEmployee(Arg.Any<Employee>());
     }
-    
+
     [Test]
     public void UpdateEmployee_DALThrowsInvalidOperationException_ExceptionRethrown()
     {
@@ -173,7 +176,7 @@ public class EmployeesRepositoryTests
         // This is also how you could make your dependency return a specific value to then be used by the test
 
 
-        Employee employeeToUpdate = new Employee(1, "Ronald", "McDonald", 7, "Clown", 100);
+        Employee employeeToUpdate = new Employee(1, "Ronald", "McDonald", 7, "Clown", 100, _startDate);
 
         EmployeesRepository systemUnderTest = new EmployeesRepository(employeesDALMock);
 
@@ -181,4 +184,50 @@ public class EmployeesRepositoryTests
         int result = int.MinValue;
         Assert.Throws<InvalidOperationException>(() => { result = systemUnderTest.UpdateEmployee(employeeToUpdate); });
     }
+
+    [Test]
+    public void FireEmployee_ValidInput_CallsEmployeesDALUpdate()
+    {
+        //Arrange
+        Employee employeeToFire = new(1, "Ronald", "McDonald", 7, "CEO", 100000, _startDate);
+
+        IEmployeesDAL employeesDALMock = Substitute.For<IEmployeesDAL>();
+
+        EmployeesRepository employeeRepo = new(employeesDALMock);
+
+        var endDate = DateTime.Now;
+
+        //Act
+
+        var result = employeeRepo.FireEmployee(employeeToFire, endDate);
+
+        //Assert
+        Assert.That(result, Is.EqualTo(EmployeesRepository.Success));
+        employeesDALMock.Received(1).UpdateEmployee(employeeToFire);
+    }
+
+    [Test]
+    //termination before startdate
+    [TestCase("2004-11-07")]
+    //Termination in the future 
+    [TestCase("2027-11-07")]
+    public void FireEmployee_InvalidInput_InvalidTerminationDate(DateTime terminationDate)
+    {
+        //Arrange
+        Employee employeeToFire = new(1, "Ronald", "McDonald", 7, "CEO", 100000, _startDate);
+
+        IEmployeesDAL employeesDALMock = Substitute.For<IEmployeesDAL>();
+
+        EmployeesRepository employeeRepo = new(employeesDALMock);
+
+        //Act
+
+        var result = employeeRepo.FireEmployee(employeeToFire, terminationDate);
+
+        //Assert
+        Assert.That(result, Is.EqualTo(EmployeesRepository.InvalidInput));
+        employeesDALMock.DidNotReceive().UpdateEmployee(employeeToFire);
+    }
+
+
 }
